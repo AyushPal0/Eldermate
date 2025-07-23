@@ -109,24 +109,54 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="max-w-6xl mx-auto pt-2 pb-8 px-4">
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-blue-800 text-center mb-10 mt-8">
-          Designed for Accessibility &amp; Care
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
-          {features.map((f, i) => (
-            <div
-              key={f.title}
-              className="rounded-2xl bg-gradient-to-br from-white/90 via-blue-50 to-blue-200 shadow-lg flex flex-col items-center px-5 py-7 transition transform hover:scale-[1.025]"
-            >
-              <div className="mb-3">{f.icon}</div>
-              <h3 className="font-bold text-blue-800 text-lg mb-2 text-center">{f.title}</h3>
-              <p className="text-gray-500 text-center text-base">{f.desc}</p>
-            </div>
-          ))}
+
+      
+
+
+
+
+<section className="max-w-6xl mx-auto pt-2 pb-8 px-4">
+  <h2 className="text-2xl sm:text-3xl font-extrabold text-blue-800 text-center mb-10 mt-8">
+    Designed for Accessibility &amp; Care
+  </h2>
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+    {features.map((f) => {
+      const isMood = f.title === "Mood Tracking";
+      const isSmartReminders = f.title === "Smart Reminders";
+
+      const card = (
+        <div
+          key={f.title}
+          className="rounded-2xl bg-gradient-to-br from-white/90 via-blue-50 to-blue-200 shadow-lg flex flex-col items-center px-5 py-7 transition transform hover:scale-[1.025] cursor-pointer"
+        >
+          <div className="mb-3">{f.icon}</div>
+          <h3 className="font-bold text-blue-800 text-lg mb-2 text-center">{f.title}</h3>
+          <p className="text-gray-500 text-center text-base">{f.desc}</p>
         </div>
-      </section>
+      );
+
+      if (isMood) {
+        return (
+          <Link href="/mood-tracking" key={f.title} aria-label="Go to Mood Tracking">
+            {card}
+          </Link>
+        );
+      }
+
+      if (isSmartReminders) {
+        return (
+          <Link href="/smart-reminders" key={f.title} aria-label="Go to Smart Reminders">
+            {card}
+          </Link>
+        );
+      }
+
+      return card;
+    })}
+  </div>
+</section>
+
+
 
       {/* CTA Section */}
       <section className="max-w-2xl mx-auto w-full flex flex-col items-center">
