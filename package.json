@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "@types/react": "^19.1.8",
+    "framer-motion": "^12.23.7",
+    "react-tsparticles": "^2.12.2""tsparticles": "^2.10.0",
+  "tsparticles-engine": "^2.10.0"
+  }
+}
