@@ -1,4 +1,6 @@
 import React, { useState, FormEvent } from 'react';
+import { useRouter } from 'next/router'; // Next.js router
+import Link from 'next/link';
 
 type UserRole = 'elder' | 'caregiver';
 
@@ -10,19 +12,21 @@ const SignIn: React.FC = () => {
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [toast, setToast] = useState<{type: 'success' | 'error', message: string} | null>(null);
+  
+  const router = useRouter();
 
   const handleRoleChange = (selectedRole: UserRole) => setRole(selectedRole);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    // Implement authentication logic here
     if (!email || !password) {
       setToast({type: 'error', message: 'Please fill in all required fields.'});
       setTimeout(() => setToast(null), 2000);
       return;
     }
-    setToast({type: 'success', message: `Welcome, ${role}!`});
-    setTimeout(() => setToast(null), 2000);
+    // **No success toast shown**
+    // Immediately navigate to index page
+    router.push('/');
   };
 
   return (
@@ -31,10 +35,10 @@ const SignIn: React.FC = () => {
       <div className="absolute top-[-80px] left-[-80px] w-[280px] h-[240px] bg-gradient-to-tr from-blue-100 to-white rounded-full opacity-30 blur-2xl pointer-events-none"></div>
       <div className="absolute bottom-[-60px] right-[-90px] w-[200px] h-[160px] bg-gradient-to-br from-blue-100 via-white to-white rounded-full opacity-20 blur-2xl pointer-events-none"></div>
 
-      {/* Toast Notification */}
+      {/* Toast Notification (only error) */}
       {toast && (
         <div className={`absolute top-6 left-1/2 z-50 -translate-x-1/2 px-5 py-3 rounded-lg shadow-lg text-white ${
-          toast.type === 'success' ? 'bg-gradient-to-r from-green-400 to-green-600' : 'bg-gradient-to-r from-red-400 to-red-700'
+          toast.type === 'error' ? 'bg-gradient-to-r from-red-400 to-red-700' : ''
         } animate-fade-in`}>
           {toast.message}
         </div>
@@ -105,7 +109,6 @@ const SignIn: React.FC = () => {
 
         {/* Sign-In Form */}
         <form onSubmit={handleSubmit} className="w-full space-y-5 mt-2">
-          {/* Email Field */}
           <div className="relative">
             <label htmlFor="email" className="block mb-2 text-blue-700 text-sm font-medium tracking-wide">
               Email
@@ -128,7 +131,6 @@ const SignIn: React.FC = () => {
               data-testid="email-input"
             />
           </div>
-          {/* Password Field */}
           <div className="relative">
             <label htmlFor="password" className="block mb-2 text-blue-700 text-sm font-medium tracking-wide">
               Password
@@ -162,10 +164,15 @@ const SignIn: React.FC = () => {
         </form>
         <div className="w-full flex justify-between mt-7 text-blue-500 text-[13px] font-medium">
           <a href="#" className="hover:underline hover:text-blue-700 transition">Forgot password?</a>
-          <a href="#" className="hover:underline hover:text-blue-700 transition">Create account</a>
+          <button
+            type="button"
+            onClick={() => router.push('/signup')}
+            className="hover:underline hover:text-blue-700 transition"
+          >
+            Create account
+          </button>
         </div>
       </section>
-      {/* Animations */}
       <style>{`
         @keyframes fade-in {
           0% { opacity: 0; transform: translateY(20px);}
