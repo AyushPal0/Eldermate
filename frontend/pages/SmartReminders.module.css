@@ -1,0 +1,124 @@
+/* app/smart-reminders/SmartReminders.module.css */
+
+/* Base page styling and gradient background */
+.pageContainer {
+  @apply min-h-screen bg-gradient-to-br from-white via-blue-50 to-blue-200 flex flex-col;
+}
+
+/* Header styling matching ElderMatel homepage */
+.header {
+  @apply flex justify-between items-center px-6 py-4 bg-white shadow-sm;
+}
+
+.headerTitle {
+  @apply text-blue-800 font-extrabold text-4xl tracking-tight outline-none;
+}
+
+.headerRight {
+  @apply flex items-center gap-4;
+}
+
+/* Main area holding reminder cards */
+.main {
+  @apply flex flex-col gap-10 px-6 py-8 max-w-6xl mx-auto w-full flex-grow;
+}
+
+/* Card styling matches homepage Mood Tracking:
+   Rounded corners, subtle shadow, padding */
+.card {
+  @apply bg-white rounded-3xl shadow-lg p-8 flex flex-col;
+  min-width: 0;
+}
+
+/* Card title styling */
+.cardTitle {
+  @apply text-blue-800 font-extrabold text-2xl mb-6;
+}
+
+/* Form styling */
+.form {
+  @apply flex flex-col gap-4 mb-6;
+}
+
+/* Form labels */
+.label {
+  @apply text-blue-700 font-semibold text-lg;
+}
+
+/* Inputs and selects styling matching homepage styling */
+.input,
+.select,
+.textarea {
+  @apply border border-blue-300 rounded-lg p-3 text-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 shadow-sm;
+}
+
+.textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* Error input */
+.inputError {
+  @apply border-red-600 ring-2 ring-red-500;
+}
+
+/* Error text style */
+.errorText {
+  @apply text-sm text-red-700 font-semibold;
+}
+
+/* Large, high-contrast buttons from homepage style */
+.button {
+  @apply bg-gradient-to-r from-blue-600 via-blue-500 to-blue-700 text-white font-bold rounded-lg py-3 px-8 shadow-md hover:from-blue-700 hover:to-blue-500 focus:outline-none focus:ring-4 focus:ring-blue-400 transition cursor-pointer text-center;
+}
+
+/* List of reminders */
+.reminderList {
+  @apply flex flex-col gap-3 max-h-64 overflow-auto;
+}
+
+.reminderListItem {
+  @apply flex justify-between items-center bg-blue-50 rounded-xl p-4 shadow-inner;
+}
+
+.reminderActions {
+  @apply flex gap-3;
+}
+
+/* Icon buttons for edit/delete */
+.iconButton {
+  @apply bg-white rounded-full p-2 shadow border border-blue-200 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer text-xl leading-none;
+}
+
+/* Voice input toggle button replicate homepage voice UI */
+.voiceToggle {
+  @apply flex items-center justify-center w-10 h-10 mt-2 rounded-full border-2 border-blue-600 text-blue-600 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-400 transition cursor-pointer;
+}
+.voiceActive {
+  @apply bg-blue-600 text-white;
+}
+
+/* Bottom navigation bar */
+.bottomNav {
+  @apply flex justify-center gap-6 p-4 bg-white shadow-inner sticky bottom-0 z-20;
+}
+
+/* Responsive adjustments */
+@media (min-width: 320px) {
+  /* mobile default */
+}
+
+@media (min-width: 768px) {
+  .main {
+    @apply flex-row gap-10;
+  }
+  .card {
+    @apply flex-1 max-w-md;
+  }
+}
+
+@media (min-width: 1024px) {
+  .card {
+    @apply max-w-lg;
+  }
+}
