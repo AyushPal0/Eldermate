@@ -18,10 +18,12 @@ app.use(morgan('dev'));
 // Import routes
 const moodRoutes = require('./routes/moodRoutes');
 const userRoutes = require('./routes/userRoutes');
+const reminderRoutes = require('./routes/reminderRoutes');
 
 // Mount routes
 app.use('/api/moods', moodRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/reminders', reminderRoutes);
 
 // Root route
 app.get('/', (req, res) => {
@@ -43,38 +45,81 @@ console.log('MongoDB connection bypassed for development');
 // Mock the mongoose model functionality
 const mockDB = {
   users: [],
-  moods: []
+  moods: [],
+  reminders: []
 };
 
 // Override mongoose models with mock implementations
 mongoose.model = function(modelName) {
   console.log(`Mock model created for: ${modelName}`);
+  
+  // Helper to get the collection based on model name
+  const getCollection = () => {
+    const name = modelName.toLowerCase();
+    if (name === 'user') return mockDB.users;
+    if (name === 'mood') return mockDB.moods;
+    if (name === 'reminder') return mockDB.reminders;
+    return [];
+  };
+  
   return {
     create: function(data) {
       const newItem = { ...data, _id: Date.now().toString() };
-      if (modelName.toLowerCase() === 'user') {
-        mockDB.users.push(newItem);
-      } else if (modelName.toLowerCase() === 'mood') {
-        mockDB.moods.push(newItem);
-      }
+      getCollection().push(newItem);
       return Promise.resolve(newItem);
     },
-    find: function() {
+    find: function(query = {}) {
+      const collection = getCollection();
+      let results = [...collection];
+      
+      // Apply filters if query is provided
+      if (query && Object.keys(query).length > 0) {
+        results = results.filter(item => {
+          return Object.entries(query).every(([key, value]) => {
+            return item[key] === value;
+          });
+        });
+      }
+      
       return {
-        sort: () => Promise.resolve(modelName.toLowerCase() === 'user' ? mockDB.users : mockDB.moods)
+        sort: () => Promise.resolve(results)
       };
     },
-    findOne: function() {
-      return Promise.resolve(null);
+    findOne: function(query = {}) {
+      const collection = getCollection();
+      const item = collection.find(item => {
+        return Object.entries(query).every(([key, value]) => {
+          return item[key] === value;
+        });
+      });
+      return Promise.resolve(item || null);
     },
-    findById: function() {
-      return Promise.resolve(null);
+    findById: function(id) {
+      const collection = getCollection();
+      const item = collection.find(item => item._id === id);
+      return Promise.resolve(item || null);
     },
-    findOneAndUpdate: function() {
-      return Promise.resolve(null);
+    findByIdAndUpdate: function(id, updateData, options = {}) {
+      const collection = getCollection();
+      const index = collection.findIndex(item => item._id === id);
+      
+      if (index === -1) return Promise.resolve(null);
+      
+      const updatedItem = { ...collection[index], ...updateData };
+      collection[index] = updatedItem;
+      
+      return Promise.resolve(options.new ? updatedItem : collection[index]);
     },
-    findOneAndDelete: function() {
-      return Promise.resolve(null);
+    findByIdAndDelete: function(id) {
+      const collection = getCollection();
+      const index = collection.findIndex(item => item._id === id);
+      
+      if (index === -1) return Promise.resolve(null);
+      
+      const deletedItem = collection[index];
+      collection.splice(index, 1);
+      
+      return Promise.resolve(deletedItem);
     }
   };
 };

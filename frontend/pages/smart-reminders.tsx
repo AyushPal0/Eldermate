@@ -4,23 +4,27 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import styles from "./SmartReminders.module.css";
+import reminderService, { 
+  Reminder, 
+  MedicationReminder, 
+  AppointmentReminder, 
+  ActivityReminder 
+} from "../utils/reminderService";
 
-interface MedicationReminder {
-  id: string;
+// Local interfaces for form state management
+interface MedicationFormInput {
   name: string;
   time: string;
   frequency: "Daily" | "Weekly";
 }
 
-interface AppointmentReminder {
-  id: string;
+interface AppointmentFormInput {
   title: string;
   datetime: string;
   location: string;
 }
 
-interface ActivityReminder {
-  id: string;
+interface ActivityFormInput {
   task: string;
   time: string;
 }
@@ -29,26 +33,31 @@ interface ValidationErrors {
   [key: string]: string;
 }
 
-/* ------------- Custom Hook: localStorage with typing ------------- */
-function useLocalStorage<T>(key: string, defaultValue: T) {
-  const [storedValue, setStoredValue] = useState<T>(() => {
-    if (typeof window === "undefined") return defaultValue;
+/* ------------- Custom Hook: API data fetching with loading state ------------- */
+function useReminders<T extends Reminder>(fetchFn: () => Promise<T[]>) {
+  const [data, setData] = useState<T[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchData = useCallback(async () => {
     try {
-      const item = window.localStorage.getItem(key);
-      return item ? (JSON.parse(item) as T) : defaultValue;
-    } catch {
-      return defaultValue;
+      setLoading(true);
+      setError(null);
+      const result = await fetchFn();
+      setData(result as T[]);
+    } catch (err) {
+      console.error('Error fetching reminders:', err);
+      setError('Failed to load reminders. Please try again later.');
+    } finally {
+      setLoading(false);
     }
-  });
+  }, [fetchFn]);
 
-  const setValue = (value: T) => {
-    setStoredValue(value);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(key, JSON.stringify(value));
-    }
-  };
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  return [storedValue, setValue] as const;
+  return { data, loading, error, refetch: fetchData, setData };
 }
 
 /* ------------- Custom Hook: Voice Input/Output via Web Speech API ------------- */
@@ -105,22 +114,48 @@ function useVoice(onResult: (text: string) => void) {
 /* ------------- Main Page Component ------------- */
 export default function SmartReminders() {
   /* State and hooks for three reminder types */
-  const [medications, setMedications] = useLocalStorage<MedicationReminder[]>("medications", []);
-  const [appointments, setAppointments] = useLocalStorage<AppointmentReminder[]>("appointments", []);
-  const [activities, setActivities] = useLocalStorage<ActivityReminder[]>("activities", []);
+  const { 
+    data: medications, 
+    loading: medicationsLoading, 
+    error: medicationsError, 
+    refetch: refetchMedications,
+    setData: setMedications 
+  } = useReminders<MedicationReminder>(() => 
+    reminderService.getRemindersByType('medication')
+  );
+
+  const { 
+    data: appointments, 
+    loading: appointmentsLoading, 
+    error: appointmentsError, 
+    refetch: refetchAppointments,
+    setData: setAppointments 
+  } = useReminders<AppointmentReminder>(() => 
+    reminderService.getRemindersByType('appointment')
+  );
+
+  const { 
+    data: activities, 
+    loading: activitiesLoading, 
+    error: activitiesError, 
+    refetch: refetchActivities,
+    setData: setActivities 
+  } = useReminders<ActivityReminder>(() => 
+    reminderService.getRemindersByType('activity')
+  );
 
   /* Form inputs */
-  const [medInput, setMedInput] = useState<Omit<MedicationReminder, "id">>({
+  const [medInput, setMedInput] = useState<MedicationFormInput>({
     name: "",
     time: "",
     frequency: "Daily",
   });
-  const [appInput, setAppInput] = useState<Omit<AppointmentReminder, "id">>({
+  const [appInput, setAppInput] = useState<AppointmentFormInput>({
     title: "",
     datetime: "",
     location: "",
   });
-  const [actInput, setActInput] = useState<Omit<ActivityReminder, "id">>({
+  const [actInput, setActInput] = useState<ActivityFormInput>({
     task: "",
     time: "",
   });
@@ -134,6 +169,11 @@ export default function SmartReminders() {
   const [editMedId, setEditMedId] = useState<string | null>(null);
   const [editAppId, setEditAppId] = useState<string | null>(null);
   const [editActId, setEditActId] = useState<string | null>(null);
+  
+  /* Loading states for form submissions */
+  const [submittingMed, setSubmittingMed] = useState<boolean>(false);
+  const [submittingApp, setSubmittingApp] = useState<boolean>(false);
+  const [submittingAct, setSubmittingAct] = useState<boolean>(false);
 
   /* Voice input target form */
   const [voiceTarget, setVoiceTarget] = useState<"med" | "app" | "act" | null>(null);
@@ -147,21 +187,21 @@ export default function SmartReminders() {
   });
 
   /* Utils */
-  function validateMedication(input: Omit<MedicationReminder, "id">): ValidationErrors {
+  function validateMedication(input: MedicationFormInput): ValidationErrors {
     const err: ValidationErrors = {};
     if (!input.name.trim()) err.name = "Medication name is required";
     if (!input.time) err.time = "Time is required";
     return err;
   }
 
-  function validateAppointment(input: Omit<AppointmentReminder, "id">): ValidationErrors {
+  function validateAppointment(input: AppointmentFormInput): ValidationErrors {
     const err: ValidationErrors = {};
     if (!input.title.trim()) err.title = "Title is required";
     if (!input.datetime) err.datetime = "Date and time are required";
     return err;
   }
 
-  function validateActivity(input: Omit<ActivityReminder, "id">): ValidationErrors {
+  function validateActivity(input: ActivityFormInput): ValidationErrors {
     const err: ValidationErrors = {};
     if (!input.task.trim()) err.task = "Task description is required";
     if (!input.time) err.time = "Time is required";
@@ -169,90 +209,228 @@ export default function SmartReminders() {
   }
 
   /* Handlers */
-  function handleMedSubmit() {
+  async function handleMedSubmit() {
     const errors = validateMedication(medInput);
     setMedErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
-    if (editMedId) {
-      setMedications(
-        medications.map((m) => (m.id === editMedId ? { ...m, ...medInput, id: editMedId } : m)),
-      );
-    } else {
-      setMedications([...medications, { id: crypto.randomUUID(), ...medInput }]);
+    try {
+      setSubmittingMed(true);
+      
+      if (editMedId) {
+        // Update existing medication reminder
+        const updatedReminder = await reminderService.updateReminder(editMedId, {
+          title: medInput.name,
+          time: medInput.time,
+          type: 'medication',
+          medicationDetails: {
+            name: medInput.name,
+            frequency: medInput.frequency
+          }
+        });
+        
+        if (updatedReminder) {
+          setMedications(medications.map(m => 
+            m._id === editMedId ? updatedReminder as MedicationReminder : m
+          ));
+        }
+      } else {
+        // Create new medication reminder
+        const newReminder = await reminderService.createReminder({
+          title: medInput.name,
+          time: medInput.time,
+          type: 'medication',
+          medicationDetails: {
+            name: medInput.name,
+            frequency: medInput.frequency
+          }
+        });
+        
+        if (newReminder) {
+          setMedications([...medications, newReminder as MedicationReminder]);
+        }
+      }
+      
+      setMedInput({ name: "", time: "", frequency: "Daily" });
+      setEditMedId(null);
+    } catch (error) {
+      console.error('Error submitting medication reminder:', error);
+      setMedErrors({ submit: 'Failed to save reminder. Please try again.' });
+    } finally {
+      setSubmittingMed(false);
     }
-    setMedInput({ name: "", time: "", frequency: "Daily" });
-    setEditMedId(null);
   }
 
-  function handleAppSubmit() {
+  async function handleAppSubmit() {
     const errors = validateAppointment(appInput);
     setAppErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
-    if (editAppId) {
-      setAppointments(
-        appointments.map((a) =>
-          a.id === editAppId ? { ...a, ...appInput, id: editAppId } : a,
-        ),
-      );
-    } else {
-      setAppointments([...appointments, { id: crypto.randomUUID(), ...appInput }]);
+    try {
+      setSubmittingApp(true);
+      
+      if (editAppId) {
+        // Update existing appointment reminder
+        const updatedReminder = await reminderService.updateReminder(editAppId, {
+          title: appInput.title,
+          time: new Date(appInput.datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          type: 'appointment',
+          appointmentDetails: {
+            datetime: appInput.datetime,
+            location: appInput.location
+          }
+        });
+        
+        if (updatedReminder) {
+          setAppointments(appointments.map(a => 
+            a._id === editAppId ? updatedReminder as AppointmentReminder : a
+          ));
+        }
+      } else {
+        // Create new appointment reminder
+        const newReminder = await reminderService.createReminder({
+          title: appInput.title,
+          time: new Date(appInput.datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+          type: 'appointment',
+          appointmentDetails: {
+            datetime: appInput.datetime,
+            location: appInput.location
+          }
+        });
+        
+        if (newReminder) {
+          setAppointments([...appointments, newReminder as AppointmentReminder]);
+        }
+      }
+      
+      setAppInput({ title: "", datetime: "", location: "" });
+      setEditAppId(null);
+    } catch (error) {
+      console.error('Error submitting appointment reminder:', error);
+      setAppErrors({ submit: 'Failed to save reminder. Please try again.' });
+    } finally {
+      setSubmittingApp(false);
     }
-    setAppInput({ title: "", datetime: "", location: "" });
-    setEditAppId(null);
   }
 
-  function handleActSubmit() {
+  async function handleActSubmit() {
     const errors = validateActivity(actInput);
     setActErrors(errors);
     if (Object.keys(errors).length > 0) return;
 
-    if (editActId) {
-      setActivities(
-        activities.map((a) =>
-          a.id === editActId ? { ...a, ...actInput, id: editActId } : a,
-        ),
-      );
-    } else {
-      setActivities([...activities, { id: crypto.randomUUID(), ...actInput }]);
+    try {
+      setSubmittingAct(true);
+      
+      if (editActId) {
+        // Update existing activity reminder
+        const updatedReminder = await reminderService.updateReminder(editActId, {
+          title: actInput.task.substring(0, 30) + (actInput.task.length > 30 ? '...' : ''),
+          time: actInput.time,
+          type: 'activity',
+          activityDetails: {
+            task: actInput.task
+          }
+        });
+        
+        if (updatedReminder) {
+          setActivities(activities.map(a => 
+            a._id === editActId ? updatedReminder as ActivityReminder : a
+          ));
+        }
+      } else {
+        // Create new activity reminder
+        const newReminder = await reminderService.createReminder({
+          title: actInput.task.substring(0, 30) + (actInput.task.length > 30 ? '...' : ''),
+          time: actInput.time,
+          type: 'activity',
+          activityDetails: {
+            task: actInput.task
+          }
+        });
+        
+        if (newReminder) {
+          setActivities([...activities, newReminder as ActivityReminder]);
+        }
+      }
+      
+      setActInput({ task: "", time: "" });
+      setEditActId(null);
+    } catch (error) {
+      console.error('Error submitting activity reminder:', error);
+      setActErrors({ submit: 'Failed to save reminder. Please try again.' });
+    } finally {
+      setSubmittingAct(false);
     }
-    setActInput({ task: "", time: "" });
-    setEditActId(null);
   }
 
   /* Delete handlers */
-  function deleteMedication(id: string) {
-    setMedications(medications.filter((m) => m.id !== id));
+  async function deleteMedication(id: string) {
+    try {
+      const success = await reminderService.deleteReminder(id);
+      if (success) {
+        setMedications(medications.filter((m) => m._id !== id));
+      }
+    } catch (error) {
+      console.error('Error deleting medication reminder:', error);
+    }
   }
-  function deleteAppointment(id: string) {
-    setAppointments(appointments.filter((a) => a.id !== id));
+  
+  async function deleteAppointment(id: string) {
+    try {
+      const success = await reminderService.deleteReminder(id);
+      if (success) {
+        setAppointments(appointments.filter((a) => a._id !== id));
+      }
+    } catch (error) {
+      console.error('Error deleting appointment reminder:', error);
+    }
   }
-  function deleteActivity(id: string) {
-    setActivities(activities.filter((a) => a.id !== id));
+  
+  async function deleteActivity(id: string) {
+    try {
+      const success = await reminderService.deleteReminder(id);
+      if (success) {
+        setActivities(activities.filter((a) => a._id !== id));
+      }
+    } catch (error) {
+      console.error('Error deleting activity reminder:', error);
+    }
   }
 
   /* Start editing */
   function startEditMed(id: string) {
-    const reminder = medications.find((m) => m.id === id);
+    const reminder = medications.find((m) => m._id === id);
     if (reminder) {
-      setMedInput({ name: reminder.name, time: reminder.time, frequency: reminder.frequency });
+      setMedInput({ 
+        name: reminder.medicationDetails.name, 
+        time: reminder.time, 
+        frequency: reminder.medicationDetails.frequency 
+      });
       setEditMedId(id);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
+  
   function startEditApp(id: string) {
-    const reminder = appointments.find((a) => a.id === id);
+    const reminder = appointments.find((a) => a._id === id);
     if (reminder) {
-      setAppInput({ title: reminder.title, datetime: reminder.datetime, location: reminder.location });
+      setAppInput({ 
+        title: reminder.title, 
+        datetime: reminder.appointmentDetails.datetime, 
+        location: reminder.appointmentDetails.location || '' 
+      });
       setEditAppId(id);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }
+  
   function startEditAct(id: string) {
-    const reminder = activities.find((a) => a.id === id);
+    const reminder = activities.find((a) => a._id === id);
     if (reminder) {
-      setActInput({ task: reminder.task, time: reminder.time });
+      setActInput({ 
+        task: reminder.activityDetails.task, 
+        time: reminder.time 
+      });
       setEditActId(id);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -375,36 +553,49 @@ export default function SmartReminders() {
               className={styles.button}
               aria-label={editMedId ? "Update medication reminder" : "Add medication reminder"}
             >
-              {editMedId ? "Update Reminder" : "Add Reminder"}
-            </button>
-          </form>
+              {submittingMed ? "Saving..." : (editMedId ? "Update Reminder" : "Add Reminder")}
+          </button>
+        </form>
 
-          {/* List existing medication reminders */}
-          <ul aria-label="Medication reminders list" className={styles.reminderList}>
-            {medications.map(({ id, name, time, frequency }) => (
-              <li key={id} className={styles.reminderListItem}>
-                <div>
-                  <p>
-                    <strong>{name}</strong> at {time} ({frequency})
-                  </p>
-                </div>
-                <div className={styles.reminderActions}>
-                  <button
-                    onClick={() => startEditMed(id)}
-                    aria-label={`Edit medication reminder for ${name}`}
-                    className={styles.iconButton}
-                    type="button"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => deleteMedication(id)}
-                    aria-label={`Delete medication reminder for ${name}`}
-                    className={styles.iconButton}
-                    type="button"
-                  >
-                    🗑️
-                  </button>
+        {/* Loading state for medications */}
+        {medicationsLoading && <p className={styles.loadingText}>Loading medication reminders...</p>}
+        {medicationsError && <p className={styles.errorText}>{medicationsError}</p>}
+
+        {/* List existing medication reminders */}
+        <ul aria-label="Medication reminders list" className={styles.reminderList}>
+          {medications.map((reminder) => (
+            <li key={reminder._id} className={styles.reminderListItem}>
+              <div>
+                <p>
+                  <strong>{reminder.medicationDetails.name}</strong> at {reminder.time} ({reminder.medicationDetails.frequency})
+                  {reminder.completed && <span className={styles.completedBadge}>✓ Completed</span>}
+                </p>
+              </div>
+              <div className={styles.reminderActions}>
+                <button
+                  onClick={() => reminderService.toggleReminderCompletion(reminder._id!).then(() => refetchMedications())}
+                  aria-label={`Mark ${reminder.medicationDetails.name} as ${reminder.completed ? 'incomplete' : 'complete'}`}
+                  className={styles.iconButton}
+                  type="button"
+                >
+                  {reminder.completed ? '↩️' : '✓'}
+                </button>
+                <button
+                  onClick={() => startEditMed(reminder._id!)}
+                  aria-label={`Edit medication reminder for ${reminder.medicationDetails.name}`}
+                  className={styles.iconButton}
+                  type="button"
+                >
+                  ✏️
+                </button>
+                <button
+                  onClick={() => deleteMedication(reminder._id!)}
+                  aria-label={`Delete medication reminder for ${reminder.medicationDetails.name}`}
+                  className={styles.iconButton}
+                  type="button"
+                >
+                  🗑️
+                </button>
                 </div>
               </li>
             ))}
@@ -492,40 +683,53 @@ export default function SmartReminders() {
               className={styles.button}
               aria-label={editAppId ? "Update appointment reminder" : "Add appointment reminder"}
             >
-              {editAppId ? "Update Reminder" : "Add Reminder"}
-            </button>
-          </form>
+              {submittingApp ? "Saving..." : (editAppId ? "Update Reminder" : "Add Reminder")}
+          </button>
+        </form>
 
-          {/* List existing appointment reminders */}
-          <ul aria-label="Appointment reminders list" className={styles.reminderList}>
-            {appointments.map(({ id, title, datetime, location }) => (
-              <li key={id} className={styles.reminderListItem}>
-                <div>
-                  <p>
-                    <strong>{title}</strong>{" "}
-                    <time dateTime={datetime}>
-                      {new Date(datetime).toLocaleString()}
-                    </time>
-                    {location ? ` @ ${location}` : ""}
-                  </p>
-                </div>
-                <div className={styles.reminderActions}>
-                  <button
-                    onClick={() => startEditApp(id)}
-                    aria-label={`Edit appointment reminder for ${title}`}
-                    className={styles.iconButton}
-                    type="button"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => deleteAppointment(id)}
-                    aria-label={`Delete appointment reminder for ${title}`}
-                    className={styles.iconButton}
-                    type="button"
-                  >
-                    🗑️
-                  </button>
+        {/* Loading state for appointments */}
+        {appointmentsLoading && <p className={styles.loadingText}>Loading appointment reminders...</p>}
+        {appointmentsError && <p className={styles.errorText}>{appointmentsError}</p>}
+
+        {/* List existing appointment reminders */}
+        <ul aria-label="Appointment reminders list" className={styles.reminderList}>
+          {appointments.map((reminder) => (
+            <li key={reminder._id} className={styles.reminderListItem}>
+              <div>
+                <p>
+                  <strong>{reminder.title}</strong>{" "}
+                  <time dateTime={reminder.appointmentDetails.datetime}>
+                    {new Date(reminder.appointmentDetails.datetime).toLocaleString()}
+                  </time>
+                  {reminder.appointmentDetails.location ? ` @ ${reminder.appointmentDetails.location}` : ""}
+                  {reminder.completed && <span className={styles.completedBadge}>✓ Completed</span>}
+                </p>
+              </div>
+              <div className={styles.reminderActions}>
+                <button
+                  onClick={() => reminderService.toggleReminderCompletion(reminder._id!).then(() => refetchAppointments())}
+                  aria-label={`Mark ${reminder.title} as ${reminder.completed ? 'incomplete' : 'complete'}`}
+                  className={styles.iconButton}
+                  type="button"
+                >
+                  {reminder.completed ? '↩️' : '✓'}
+                </button>
+                <button
+                  onClick={() => startEditApp(reminder._id!)}
+                  aria-label={`Edit appointment reminder for ${reminder.title}`}
+                  className={styles.iconButton}
+                  type="button"
+                >
+                  ✏️
+                </button>
+                <button
+                  onClick={() => deleteAppointment(reminder._id!)}
+                  aria-label={`Delete appointment reminder for ${reminder.title}`}
+                  className={styles.iconButton}
+                  type="button"
+                >
+                  🗑️
+                </button>
                 </div>
               </li>
             ))}
@@ -600,36 +804,49 @@ export default function SmartReminders() {
               className={styles.button}
               aria-label={editActId ? "Update activity reminder" : "Add activity reminder"}
             >
-              {editActId ? "Update Reminder" : "Add Reminder"}
-            </button>
-          </form>
+              {submittingAct ? "Saving..." : (editActId ? "Update Reminder" : "Add Reminder")}
+          </button>
+        </form>
 
-          {/* List existing activity reminders */}
-          <ul aria-label="Activity reminders list" className={styles.reminderList}>
-            {activities.map(({ id, task, time }) => (
-              <li key={id} className={styles.reminderListItem}>
-                <div>
-                  <p>
-                    <strong>{task}</strong> at {time}
-                  </p>
-                </div>
-                <div className={styles.reminderActions}>
-                  <button
-                    onClick={() => startEditAct(id)}
-                    aria-label={`Edit activity reminder for ${task}`}
-                    className={styles.iconButton}
-                    type="button"
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    onClick={() => deleteActivity(id)}
-                    aria-label={`Delete activity reminder for ${task}`}
-                    className={styles.iconButton}
-                    type="button"
-                  >
-                    🗑️
-                  </button>
+        {/* Loading state for activities */}
+        {activitiesLoading && <p className={styles.loadingText}>Loading activity reminders...</p>}
+        {activitiesError && <p className={styles.errorText}>{activitiesError}</p>}
+
+        {/* List existing activity reminders */}
+        <ul aria-label="Activity reminders list" className={styles.reminderList}>
+          {activities.map((reminder) => (
+            <li key={reminder._id} className={styles.reminderListItem}>
+              <div>
+                <p>
+                  <strong>{reminder.activityDetails.task}</strong> at {reminder.time}
+                  {reminder.completed && <span className={styles.completedBadge}>✓ Completed</span>}
+                </p>
+              </div>
+              <div className={styles.reminderActions}>
+                <button
+                  onClick={() => reminderService.toggleReminderCompletion(reminder._id!).then(() => refetchActivities())}
+                  aria-label={`Mark ${reminder.title} as ${reminder.completed ? 'incomplete' : 'complete'}`}
+                  className={styles.iconButton}
+                  type="button"
+                >
+                  {reminder.completed ? '↩️' : '✓'}
+                </button>
+                <button
+                  onClick={() => startEditAct(reminder._id!)}
+                  aria-label={`Edit activity reminder for ${reminder.activityDetails.task}`}
+                  className={styles.iconButton}
+                  type="button"
+                >
+                  ✏️
+                </button>
+                <button
+                  onClick={() => deleteActivity(reminder._id!)}
+                  aria-label={`Delete activity reminder for ${reminder.activityDetails.task}`}
+                  className={styles.iconButton}
+                  type="button"
+                >
+                  🗑️
+                </button>
                 </div>
               </li>
             ))}

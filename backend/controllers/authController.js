@@ -86,7 +86,10 @@ exports.protect = async (req, res, next) => {
     
     console.log('Mock authentication successful');
     next();
-
+    
+    // The following code is commented out as it references undefined variables
+    // and causes errors in the mock environment
+    /*
     // 4) Check if user changed password after the token was issued
     if (currentUser.changedPasswordAfter(decoded.iat)) {
       return res.status(401).json({
@@ -98,6 +101,7 @@ exports.protect = async (req, res, next) => {
     // Grant access to protected route
     req.user = currentUser;
     next();
+    */
   } catch (err) {
     next(err);
   }

@@ -2,113 +2,113 @@ import axios from 'axios';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
-// Create axios instance with base URL
+// Create an API instance with a base URL
 const api = axios.create({
   baseURL: API_URL,
+  timeout: 5000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Add request interceptor to add auth token to requests
+// Request interceptor for adding auth token
 api.interceptors.request.use(
   (config) => {
-    // Get token from localStorage
     const token = localStorage.getItem('token');
-    
-    // If token exists, add to headers
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Add response interceptor to handle common errors
+// Response interceptor for handling auth errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Handle 401 Unauthorized errors (token expired or invalid)
     if (error.response && error.response.status === 401) {
-      // Clear token and redirect to login
+      // Handle 401 errors (e.g., redirect to login)
       localStorage.removeItem('token');
-      
-      // Only redirect if we're in the browser
-      if (typeof window !== 'undefined') {
-        window.location.href = '/signin';
-      }
+      window.location.href = '/login';
     }
-    
     return Promise.reject(error);
   }
 );
 
-// Auth services
-export const authService = {
-  signup: async (userData: { name: string; email: string; password: string; role?: string }) => {
-    const response = await api.post('/users/signup', userData);
-    return response.data;
-  },
-  
-  login: async (credentials: { email: string; password: string }) => {
-    const response = await api.post('/users/login', credentials);
-    
-    // Save token to localStorage
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
+// Authentication service
+const authService = {
+  login: async (email, password) => {
+    try {
+      const response = await api.post('/users/login', { email, password });
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
+      return response.data;
+    } catch (error) {
+      throw error;
     }
-    
-    return response.data;
   },
-  
+
+  signup: async (name, email, password) => {
+    try {
+      const response = await api.post('/users/signup', { name, email, password });
+      if (response.data.token) {
+        localStorage.setItem('token', response.data.token);
+      }
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
   logout: () => {
     localStorage.removeItem('token');
   },
-  
-  getCurrentUser: async () => {
-    const response = await api.get('/users/me');
-    return response.data;
+
+  isAuthenticated: () => {
+    return !!localStorage.getItem('token');
   },
 };
 
-// Mood services
-export const moodService = {
-  createMood: async (moodData: { mood?: string; notes?: string }) => {
-    const response = await api.post('/moods', moodData);
-    return response.data;
+// Mood tracking service
+const moodService = {
+  submitMood: async (mood, notes) => {
+    try {
+      const response = await api.post('/moods', { mood, notes });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   },
-  
-  getAllMoods: async () => {
-    const response = await api.get('/moods');
-    return response.data;
+
+  getMoodHistory: async () => {
+    try {
+      const response = await api.get('/moods');
+      return response.data.data.moods;
+    } catch (error) {
+      throw error;
+    }
   },
-  
-  getMood: async (id: string) => {
-    const response = await api.get(`/moods/${id}`);
-    return response.data;
-  },
-  
-  updateMood: async (id: string, moodData: { mood?: string; notes?: string }) => {
-    const response = await api.patch(`/moods/${id}`, moodData);
-    return response.data;
-  },
-  
-  deleteMood: async (id: string) => {
-    const response = await api.delete(`/moods/${id}`);
-    return response.data;
-  },
-  
+
   getMoodStats: async () => {
-    const response = await api.get('/moods/stats');
-    return response.data;
+    try {
+      const response = await api.get('/moods/stats');
+      return response.data.data;
+    } catch (error) {
+      throw error;
+    }
   },
-  
-  getMoodTrends: async (days?: number) => {
-    const response = await api.get('/moods/trends', { params: { days } });
-    return response.data;
+
+  getMoodTrends: async () => {
+    try {
+      const response = await api.get('/moods/trends');
+      return response.data.data;
+    } catch (error) {
+      throw error;
+    }
   },
 };
 
+export { authService, moodService };
 export default api;
